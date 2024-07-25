@@ -4,6 +4,8 @@
 #include <mma.h>
 #include <cuda_fp16.h>
 
+using namespace nvcuda;
+
 #define M 16   // anything
 #define N 16   // anything
 #define K 16   // anything
@@ -16,22 +18,22 @@
 
 __global__ void wmma_kernel(half *a, half *b, float *c) {
    // Declare the fragments
-   nvcuda::wmma::fragment<nvcuda::wmma::matrix_a, 16, 16, 16, half, nvcuda::wmma::col_major> a_frag;
-   nvcuda::wmma::fragment<nvcuda::wmma::matrix_b, 16, 16, 16, half, nvcuda::wmma::row_major> b_frag;
-   nvcuda::wmma::fragment<nvcuda::wmma::accumulator, 16, 16, 16, float> c_frag;
+   wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
+   wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
+   wmma::fragment<wmma::accumulator, 16, 16, 16, float> c_frag;
 
    // Initialize the output to zero
-   nvcuda::wmma::fill_fragment(c_frag, 0.0f);
+   wmma::fill_fragment(c_frag, 0.0f);
 
    // Load the inputs
-   nvcuda::wmma::load_matrix_sync(a_frag, a, 16);
-   nvcuda::wmma::load_matrix_sync(b_frag, b, 16);
+   wmma::load_matrix_sync(a_frag, a, 16);
+   wmma::load_matrix_sync(b_frag, b, 16);
 
    // Perform the matrix multiplication
-   nvcuda::wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+   wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
 
    // Store the output
-   nvcuda::wmma::store_matrix_sync(c, c_frag, 16, nvcuda::wmma::mem_row_major);
+   wmma::store_matrix_sync(c, c_frag, 16, wmma::mem_row_major);
 }
 
 __global__ void float2half(float* float_array, half* half_array, int num_elements){
@@ -95,7 +97,7 @@ int main(){
     printf("Setting matrixC...\n");
     for (int i = 0; i < M; i++){
         for (int j = 0; j < N; j++){
-            matrixC[i * N + j] = (float)rand()/(float)RAND_MAX;
+            matrixC[i * N + j] = 0.0f;
             printf("%f ", matrixC[i * M + j]);
         }
         printf("\n");
@@ -211,16 +213,13 @@ int main(){
         for (int j = 0; j < N; j++){
             tempDiscrepancy = matrixOut[i * N + j] - hostCheck_matrixOut[i * N + j];
 #ifdef DEBUG
-            printf("%f vs ", matrixOut[i * N + j]);
-            printf("%f  ", hostCheck_matrixOut[i * N + j]);
+            printf("matrixC[%d][%d]: %f vs ",i,j, matrixOut[i * N + j]);
+            printf("%f\n", hostCheck_matrixOut[i * N + j]);
 #endif
             if (abs(tempDiscrepancy) > maxDiscrepancy){
                 maxDiscrepancy = abs(tempDiscrepancy);
             }
         }
-#ifdef DEBUG
-        printf("\n");
-#endif
     }
 
     printf("maxDiscrepancy = %f\n", maxDiscrepancy);
